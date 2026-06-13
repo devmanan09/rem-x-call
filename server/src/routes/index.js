@@ -9,6 +9,7 @@ const subscriptionRoutes = require('./subscriptionRoutes');
 const productRoutes = require('./productRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const callRoutes = require('./callRoutes');
+const reportsRoutes = require('./reportsRoutes');
 
 const router = express.Router();
 
@@ -52,6 +53,10 @@ const defaultRoutes = [
     {
         path: '/calls',
         route: callRoutes,
+    },
+    {
+        path: '/reports',
+        route: reportsRoutes,
     },
 ];
 

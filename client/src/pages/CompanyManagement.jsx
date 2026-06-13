@@ -5,6 +5,8 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { api } from '../lib/api';
 import { countries } from 'countries-list';
 import PaginationFooter from '../components/PaginationFooter';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Search, Plus, MoreVertical, UserX, Trash2, 
   ChevronLeft, Upload, Phone, Calendar, User, Landmark, CreditCard, Clock, ArrowUpRight, Check, ChevronDown, Eye, CircleX, PencilLine, Ban, KeyRound
@@ -489,6 +491,38 @@ const CompanyDetailsView = ({ company, onBack, onToggleSubscription, onUpgradeSu
   </div>
 );
 
+// --- Form sub-components (defined OUTSIDE main component to prevent focus loss on re-render) ---
+
+const InputField = ({ label, hint, error, children }) => (
+  <div>
+    <label className="block text-[13px] font-bold text-gray-700 mb-1">{label}</label>
+    {hint && <p className="mb-1.5 text-[11px] font-medium text-gray-400">{hint}</p>}
+    {children}
+    {error && <p className="mt-1 text-[11px] font-semibold text-red-500 flex items-center gap-1">⚠ {error}</p>}
+  </div>
+);
+
+const inputCls = (err) =>
+  `w-full bg-white border py-2.5 px-4 rounded-xl text-[13px] font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 transition-shadow ${
+    err ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230] hover:border-gray-300'
+  }`;
+
+const SectionCard = ({ number, title, subtitle, icon, children }) => (
+  <div className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden">
+    <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1a1a1a] text-white text-[13px] font-black">
+        {number}
+      </div>
+      <div>
+        <h2 className="text-[14px] font-black text-gray-900 tracking-tight">{title}</h2>
+        <p className="text-[11px] font-medium text-gray-400 mt-0.5">{subtitle}</p>
+      </div>
+      <div className="ml-auto text-gray-200">{icon}</div>
+    </div>
+    <div className="p-6 space-y-4">{children}</div>
+  </div>
+);
+
 // --- Main Page Component ---
 
 export default function CompanyManagement() {
@@ -682,6 +716,53 @@ export default function CompanyManagement() {
     [allTableData]
   );
 
+  // ── PDF Export ────────────────────────────────────────────────────────────
+  const handleExportPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const tabLabels = { all: 'All Companies', active: 'Active Companies', pending: 'Pending Invites', subscriptions: 'Subscriptions' };
+    const title = tabLabels[currentTab] || 'Companies';
+    const exportedAt = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    // Header
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, 14, 18);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text(`Exported: ${exportedAt}`, 14, 25);
+    doc.setTextColor(0);
+
+    let columns = [];
+    let rows = [];
+
+    if (currentTab === 'all') {
+      columns = ['Agent Name', 'Company', 'Business Email', 'Agent Email', 'Phone', 'Date', 'Plan', 'Status', 'Billing'];
+      rows = allTableData.map((r) => [r.agentName, r.companyName, r.businessEmail, r.email, r.phone, r.date, r.plan, r.status, r.billing]);
+    } else if (currentTab === 'active') {
+      columns = ['Agent Name', 'Company', 'Status', 'Today Calls', 'Connected', 'Failed', 'Avg Duration'];
+      rows = activeCompanies.map((r) => [r.agentName, r.companyName, r.status, r.todayCalls, r.connectedCalls, r.failedCalls, r.avgDuration]);
+    } else if (currentTab === 'pending') {
+      columns = ['Agent Name', 'Company', 'Plan', 'Invite Status', 'Invited On'];
+      rows = pendingCompanies.map((r) => [r.agentName, r.companyName, r.plan, r.inviteStatus, r.invitedOn]);
+    } else if (currentTab === 'subscriptions') {
+      columns = ['Company', 'Plan', 'Billing', 'Price', 'Start', 'Renewal', 'Status'];
+      rows = subscriptionRows.map((r) => [r.companyName, r.plan, r.billing, `$${r.price}`, r.start, r.renewal, r.status]);
+    }
+
+    autoTable(doc, {
+      startY: 30,
+      head: [columns],
+      body: rows,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [26, 26, 26], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 249, 251] },
+      rowPageBreak: 'auto',
+    });
+
+    doc.save(`${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.pdf`);
+  };
+
   useEffect(() => {
     setSelectedCompanyIds([]);
   }, [currentTab, page, viewMode]);
@@ -810,7 +891,10 @@ export default function CompanyManagement() {
   };
 
   const handleDeactivateCompany = async (companyId) => {
-    await updateCompany(companyId, { subscriptionStatus: 'paused' });
+    const company = allTableData.find((c) => c.id === companyId);
+    const currentStatus = String(company?.status || '').toLowerCase();
+    const isActive = currentStatus === 'active' || currentStatus === 'trial';
+    await updateCompany(companyId, { subscriptionStatus: isActive ? 'paused' : 'active' });
   };
 
   const handleResendPassword = async (companyId) => {
@@ -1058,380 +1142,340 @@ export default function CompanyManagement() {
 
   // --- Add / Edit Form View ---
   if (viewMode === 'add' || viewMode === 'edit') {
+    const isAdd = viewMode === 'add';
+
     return (
-      <div className="flex flex-col h-full bg-[#f4f5f7] px-6 lg:px-10 overflow-y-auto pb-10">
-        
-        {/* Header Back Button */}
-        <div className="py-8">
-          <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-[13px] font-bold text-gray-500 hover:text-gray-900 transition-colors">
+      <div className="flex flex-col bg-[#f4f5f7] pb-12">
+
+        {/* Top bar */}
+        <div className="flex items-center justify-between py-6 px-1">
+          <button
+            onClick={() => setViewMode('list')}
+            className="flex items-center gap-2 text-[13px] font-bold text-gray-500 hover:text-gray-900 transition-colors"
+          >
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
+          <div className="hidden sm:flex items-center gap-2 text-[12px] font-bold text-gray-400">
+            <span className={isAdd ? 'text-gray-900' : ''}>New Company</span>
+          </div>
         </div>
 
-        <div className="flex-1 w-full max-w-5xl mx-auto bg-[#f4f5f7] rounded-3xl pb-10 relative">
-          
-          <h1 className="text-2xl font-display font-[900] text-gray-900 mb-2 tracking-tight">
-            {viewMode === 'add' ? 'Add new company' : 'Edit Company'}
-          </h1>
-          <p className="text-[13px] font-semibold text-gray-500 mb-6 lg:mb-8">
-            Include all the necessary details.
-          </p>
-          {companyErr && (
-            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700">
-              {companyErr}
+        {/* Page heading */}
+        <div className="mb-6 px-1">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8bed21] to-[#5AD43D] shadow-md shadow-green-200">
+              <Plus className="w-5 h-5 text-[#1a1a1a]" strokeWidth={3} />
             </div>
-          )}
+            <h1 className="text-[26px] font-display font-[900] text-gray-900 tracking-tight leading-none">
+              {isAdd ? 'Add new company' : 'Edit Company'}
+            </h1>
+          </div>
+          <p className="text-[13px] font-medium text-gray-500 ml-[52px]">Fill in the details below to {isAdd ? 'onboard a new company' : 'update the company'}.</p>
+        </div>
 
-          <div className="space-y-10">
-            {/* Company Details */}
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-32 border-b border-gray-200/60 pb-10 border-dashed">
-              <div className="w-64 shrink-0">
-                <h2 className="text-[15px] font-bold text-gray-900 mb-1">Company details</h2>
-                <p className="text-[13px] font-medium text-gray-500">Include all the company details.</p>
-              </div>
-              <div className="flex-1 max-w-xl space-y-4">
-                <div>
-                  <label className="block text-[13px] font-bold text-gray-700 mb-2">Company name *</label>
+        {companyErr && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-700 flex items-center gap-2">
+            <CircleX className="w-4 h-4 shrink-0" /> {companyErr}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4">
+
+          {/* Left column — form sections */}
+          <div className="space-y-4">
+
+            {/* 1. Company Details */}
+            <SectionCard number="1" title="Company Details" subtitle="Basic information about the company." icon={<Landmark className="w-6 h-6" />}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputField label="Company name *" error={formErrors.companyName}>
                   <input
                     type="text"
                     value={inviteForm.companyName}
-                    onChange={(e) => {
-                      setInviteForm((f) => ({ ...f, companyName: e.target.value }));
-                      if (formErrors.companyName) setFormErrors((prev) => ({ ...prev, companyName: '' }));
-                    }}
-                    placeholder="Company name"
-                    className={`w-full bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 ${
-                      formErrors.companyName ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230]'
-                    }`}
+                    onChange={(e) => { setInviteForm((f) => ({ ...f, companyName: e.target.value })); if (formErrors.companyName) setFormErrors((p) => ({ ...p, companyName: '' })); }}
+                    placeholder="e.g. Acme Corp"
+                    className={inputCls(formErrors.companyName)}
                   />
-                  {formErrors.companyName && <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.companyName}</p>}
-                </div>
-                <div>
-                  <label className="block text-[13px] font-bold text-gray-700 mb-2">Business email *</label>
+                </InputField>
+                <InputField label="Business email *" error={formErrors.companyBusinessEmail}>
                   <input
                     type="email"
                     value={inviteForm.companyBusinessEmail}
-                    onChange={(e) => {
-                      setInviteForm((f) => ({ ...f, companyBusinessEmail: e.target.value }));
-                      if (formErrors.companyBusinessEmail) setFormErrors((prev) => ({ ...prev, companyBusinessEmail: '' }));
-                    }}
+                    onChange={(e) => { setInviteForm((f) => ({ ...f, companyBusinessEmail: e.target.value })); if (formErrors.companyBusinessEmail) setFormErrors((p) => ({ ...p, companyBusinessEmail: '' })); }}
                     placeholder="company@business.com"
-                    className={`w-full bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 ${
-                      formErrors.companyBusinessEmail ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230]'
-                    }`}
+                    className={inputCls(formErrors.companyBusinessEmail)}
                   />
-                  {formErrors.companyBusinessEmail && (
-                    <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.companyBusinessEmail}</p>
-                  )}
-                </div>
+                </InputField>
               </div>
-            </div>
+            </SectionCard>
 
-            {/* Agent Basic Info */}
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-32 border-b border-gray-200/60 pb-10 border-dashed">
-              <div className="w-64 shrink-0">
-                <h2 className="text-[15px] font-bold text-gray-900 mb-1">Agent basic info</h2>
-                <p className="text-[13px] font-medium text-gray-500">Enter all agent basic information.</p>
-              </div>
-              <div className="flex-1 max-w-xl space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[13px] font-bold text-gray-700 mb-2">Agent first name *</label>
-                    <input
-                      type="text"
-                      value={inviteForm.agentFirstName}
-                      onChange={(e) => {
-                        setInviteForm((f) => ({ ...f, agentFirstName: e.target.value }));
-                        if (formErrors.agentFirstName) setFormErrors((prev) => ({ ...prev, agentFirstName: '' }));
-                      }}
-                      placeholder="First name"
-                      className={`w-full bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 ${
-                        formErrors.agentFirstName ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230]'
-                      }`}
-                    />
-                    {formErrors.agentFirstName && (
-                      <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.agentFirstName}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[13px] font-bold text-gray-700 mb-2">Agent last name *</label>
-                    <input
-                      type="text"
-                      value={inviteForm.agentLastName}
-                      onChange={(e) => {
-                        setInviteForm((f) => ({ ...f, agentLastName: e.target.value }));
-                        if (formErrors.agentLastName) setFormErrors((prev) => ({ ...prev, agentLastName: '' }));
-                      }}
-                      placeholder="Last name"
-                      className={`w-full bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 ${
-                        formErrors.agentLastName ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230]'
-                      }`}
-                    />
-                    {formErrors.agentLastName && (
-                      <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.agentLastName}</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[13px] font-bold text-gray-700 mb-2">Email *</label>
-                  <p className="mb-2 text-[12px] font-medium text-gray-500">Personal email used to sign in.</p>
+            {/* 2. Agent Info */}
+            <SectionCard number="2" title="Agent Information" subtitle="The person who will manage this company." icon={<User className="w-6 h-6" />}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputField label="First name *" error={formErrors.agentFirstName}>
                   <input
-                    type="email"
-                    value={inviteForm.agentEmail}
-                    onChange={(e) => {
-                      setInviteForm((f) => ({ ...f, agentEmail: e.target.value }));
-                      if (formErrors.agentEmail) setFormErrors((prev) => ({ ...prev, agentEmail: '' }));
-                    }}
-                    placeholder="name@gmail.com"
-                    className={`w-full bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 ${
-                      formErrors.agentEmail ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230]'
-                    }`}
+                    type="text"
+                    value={inviteForm.agentFirstName}
+                    onChange={(e) => { setInviteForm((f) => ({ ...f, agentFirstName: e.target.value })); if (formErrors.agentFirstName) setFormErrors((p) => ({ ...p, agentFirstName: '' })); }}
+                    placeholder="First name"
+                    className={inputCls(formErrors.agentFirstName)}
                   />
-                  {formErrors.agentEmail && <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.agentEmail}</p>}
-                </div>
-                <div>
-                  <label className="block text-[13px] font-bold text-gray-700 mb-2">Phone Number *</label>
-                  <div className="flex gap-2">
-                    <select
-                      value={inviteForm.agentCountryCode}
-                      onChange={(e) => setInviteForm((f) => ({ ...f, agentCountryCode: e.target.value }))}
-                      className="w-32 shrink-0 bg-[#f8f9fb] border border-gray-200 py-3 px-2 rounded-xl text-[13px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230] text-center"
-                    >
-                      {COUNTRY_CODE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="tel-national"
-                      value={inviteForm.agentPhoneNumber}
-                      onChange={(e) => {
-                        setInviteForm((f) => ({ ...f, agentPhoneNumber: e.target.value.replace(/\D/g, '') }));
-                        if (formErrors.agentPhone) setFormErrors((prev) => ({ ...prev, agentPhone: '' }));
-                      }}
-                      placeholder="Phone number"
-                      className={`min-w-0 flex-1 bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230] outline-none ${
-                        formErrors.agentPhone ? 'border border-red-300' : 'border border-gray-200'
-                      }`}
-                    />
-                  </div>
-                  {formErrors.agentPhone && <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.agentPhone}</p>}
-                </div>
-                <div>
-                  <label className="block text-[13px] font-bold text-gray-700 mb-2">Password</label>
+                </InputField>
+                <InputField label="Last name *" error={formErrors.agentLastName}>
                   <input
-                    type="password"
-                    disabled
-                    readOnly
-                    placeholder="Sent by email"
-                    className="w-full cursor-not-allowed bg-gray-100/80 border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-500"
+                    type="text"
+                    value={inviteForm.agentLastName}
+                    onChange={(e) => { setInviteForm((f) => ({ ...f, agentLastName: e.target.value })); if (formErrors.agentLastName) setFormErrors((p) => ({ ...p, agentLastName: '' })); }}
+                    placeholder="Last name"
+                    className={inputCls(formErrors.agentLastName)}
                   />
-                  <p className="mt-1.5 text-[12px] font-medium text-gray-500">
-                    A temporary password is generated and emailed to the agent. They sign in with personal email and that password.
-                  </p>
-                </div>
+                </InputField>
               </div>
-            </div>
-
-            {/* Subscription Plan */}
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-32 border-b border-gray-200/60 pb-10 border-dashed">
-              <div className="w-64 shrink-0">
-                <h2 className="text-[15px] font-bold text-gray-900 mb-1">Subscription Plan</h2>
-                <p className="text-[13px] font-medium text-gray-500">Choose the plan for this company (create plans under Subscriptions & Billing).</p>
-              </div>
-              <div className="flex-1 max-w-xl space-y-4">
-                <div>
-                  <label className="block text-[13px] font-bold text-gray-700 mb-2">Subscription plan *</label>
+              <InputField label="Agent email *" hint="Used to sign in to the dashboard." error={formErrors.agentEmail}>
+                <input
+                  type="email"
+                  value={inviteForm.agentEmail}
+                  onChange={(e) => { setInviteForm((f) => ({ ...f, agentEmail: e.target.value })); if (formErrors.agentEmail) setFormErrors((p) => ({ ...p, agentEmail: '' })); }}
+                  placeholder="agent@gmail.com"
+                  className={inputCls(formErrors.agentEmail)}
+                />
+              </InputField>
+              <InputField label="Phone number *" error={formErrors.agentPhone}>
+                <div className="flex gap-2">
                   <select
-                    value={inviteForm.subscriptionPlanId}
-                    onChange={(e) => {
-                      setInviteForm((f) => ({ ...f, subscriptionPlanId: e.target.value }));
-                      if (formErrors.subscriptionPlanId) setFormErrors((prev) => ({ ...prev, subscriptionPlanId: '' }));
-                    }}
-                    className={`w-full bg-[#f8f9fb] border py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 appearance-none ${
-                      formErrors.subscriptionPlanId ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-[#7ae230]'
-                    }`}
+                    value={inviteForm.agentCountryCode}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, agentCountryCode: e.target.value }))}
+                    className="w-28 shrink-0 bg-white border border-gray-200 py-2.5 px-2 rounded-xl text-[12px] font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#7ae230]"
                   >
-                    <option value="">Select plan</option>
-                    {subscriptionPlans.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (${Number(p.priceMonthly || 0).toFixed(0)} / {p.billingCycle})
-                      </option>
+                    {COUNTRY_CODE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
-                  {formErrors.subscriptionPlanId && <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.subscriptionPlanId}</p>}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={inviteForm.agentPhoneNumber}
+                    onChange={(e) => { setInviteForm((f) => ({ ...f, agentPhoneNumber: e.target.value.replace(/\D/g, '') })); if (formErrors.agentPhone) setFormErrors((p) => ({ ...p, agentPhone: '' })); }}
+                    placeholder="Phone number"
+                    className={`flex-1 min-w-0 ${inputCls(formErrors.agentPhone)}`}
+                  />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[13px] font-bold text-gray-700 mb-2">Trial period (days)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={inviteForm.trialDays}
-                      onChange={(e) => setInviteForm((f) => ({ ...f, trialDays: e.target.value }))}
-                      className="w-full bg-[#f8f9fb] border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13px] font-bold text-gray-700 mb-2">Discount (%)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={inviteForm.discountPercent}
-                      onChange={(e) => setInviteForm((f) => ({ ...f, discountPercent: e.target.value }))}
-                      className="w-full bg-[#f8f9fb] border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230]"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+              </InputField>
 
-            {/* White-Label Setup */}
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-32 pb-6">
-              <div className="w-64 shrink-0">
-                <h2 className="text-[15px] font-bold text-gray-900 mb-1">White-Label Setup</h2>
-                <p className="text-[13px] font-medium text-gray-500">
-                  White-label is optional and only available for plans that include this feature.
+              {/* Password info pill */}
+              <div className="flex items-start gap-3 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+                <div className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-blue-400 flex items-center justify-center text-white text-[9px] font-black">i</div>
+                <p className="text-[12px] font-medium text-blue-700 leading-relaxed">
+                  A temporary password is auto-generated and sent to the agent's email. They can change it after first login.
                 </p>
               </div>
-              <div className="flex-1 max-w-xl space-y-6">
-                {!planIncludesWhiteLabel ? (
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-600">
-                    This plan does not include white-label. Default dashboard branding will be used.
-                  </div>
-                ) : (
-                  <>
-                    <label className="flex items-center gap-3 text-[13px] font-bold text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={inviteForm.enableWhiteLabel}
-                        onChange={(e) => setInviteForm((f) => ({ ...f, enableWhiteLabel: e.target.checked }))}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                      Enable white-label for this company
-                    </label>
+            </SectionCard>
 
-                    {inviteForm.enableWhiteLabel && (
-                      <>
+            {/* 3. Subscription Plan */}
+            <SectionCard number="3" title="Subscription Plan" subtitle="Choose the plan and billing configuration." icon={<CreditCard className="w-6 h-6" />}>
+              <InputField label="Subscription plan *" error={formErrors.subscriptionPlanId}>
+                <div className="relative">
+                  <select
+                    value={inviteForm.subscriptionPlanId}
+                    onChange={(e) => { setInviteForm((f) => ({ ...f, subscriptionPlanId: e.target.value })); if (formErrors.subscriptionPlanId) setFormErrors((p) => ({ ...p, subscriptionPlanId: '' })); }}
+                    className={`appearance-none pr-10 ${inputCls(formErrors.subscriptionPlanId)}`}
+                  >
+                    <option value="">Select a plan</option>
+                    {subscriptionPlans.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} — ${Number(p.priceMonthly || 0).toFixed(0)}/{p.billingCycle}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
+              </InputField>
+              <div className="grid grid-cols-2 gap-4">
+                <InputField label="Trial period (days)">
+                  <input
+                    type="number" min="0"
+                    value={inviteForm.trialDays}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, trialDays: e.target.value }))}
+                    className={inputCls(false)}
+                  />
+                </InputField>
+                <InputField label="Discount (%)">
+                  <input
+                    type="number" min="0" max="100"
+                    value={inviteForm.discountPercent}
+                    onChange={(e) => setInviteForm((f) => ({ ...f, discountPercent: e.target.value }))}
+                    className={inputCls(false)}
+                  />
+                </InputField>
+              </div>
+            </SectionCard>
+
+            {/* 4. White Label */}
+            <SectionCard number="4" title="White-Label Branding" subtitle="Custom branding for this company's dashboard." icon={<PencilLine className="w-6 h-6" />}>
+              {!planIncludesWhiteLabel ? (
+                <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <Ban className="w-4 h-4 text-gray-400 shrink-0" />
+                  <p className="text-[12px] font-semibold text-gray-500">White-label is not included in the selected plan. Default branding will be used.</p>
+                </div>
+              ) : (
+                <>
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <div
+                      onClick={() => setInviteForm((f) => ({ ...f, enableWhiteLabel: !f.enableWhiteLabel }))}
+                      className={`relative h-6 w-11 rounded-full transition-colors ${inviteForm.enableWhiteLabel ? 'bg-[#8bed21]' : 'bg-gray-200'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${inviteForm.enableWhiteLabel ? 'translate-x-5' : ''}`} />
+                    </div>
+                    <span className="text-[13px] font-bold text-gray-700">Enable white-label for this company</span>
+                  </label>
+
+                  {inviteForm.enableWhiteLabel && (
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <label className="block text-[13px] font-bold text-gray-700 mb-2">Upload Logo</label>
+                        <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(e) => uploadLogo(e.target.files?.[0])} />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50 py-8 flex flex-col items-center justify-center hover:bg-gray-100/60 transition-colors"
+                        >
+                          {inviteForm.whiteLabelLogoUrl ? (
+                            <img src={inviteForm.whiteLabelLogoUrl} alt="Logo" className="mb-2 h-12 w-12 rounded-lg object-cover" />
+                          ) : (
+                            <Upload className="w-5 h-5 text-gray-500 mb-2" />
+                          )}
+                          <span className="text-[13px] font-bold text-gray-700">{uploadingLogo ? 'Uploading…' : 'Upload logo'}</span>
+                          <span className="text-[11px] text-gray-400 mt-0.5">{inviteForm.whiteLabelLogoUrl ? '✓ Logo uploaded' : 'PNG or JPG'}</span>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[13px] font-bold text-gray-700 mb-2">Upload Logo</label>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/png,image/jpeg,image/jpg"
-                            className="hidden"
-                            onChange={(e) => uploadLogo(e.target.files?.[0])}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-full border-2 border-dashed border-gray-200 rounded-2xl bg-[#f8f9fb] py-10 flex flex-col items-center justify-center hover:bg-gray-50 transition-colors"
-                          >
-                            {inviteForm.whiteLabelLogoUrl ? (
-                              <img src={inviteForm.whiteLabelLogoUrl} alt="Logo preview" className="mb-3 h-14 w-14 rounded-lg object-cover" />
-                            ) : (
-                              <Upload className="w-5 h-5 text-gray-700 mb-3" />
-                            )}
-                            <span className="text-[14px] font-bold text-gray-900">
-                              {uploadingLogo ? 'Uploading logo…' : 'Upload or drag and drop logo'}
-                            </span>
-                            <span className="text-[12px] font-medium text-gray-400 mt-1">
-                              {inviteForm.whiteLabelLogoUrl ? 'Logo uploaded successfully' : 'Format should be PNG or JPG'}
-                            </span>
-                          </button>
-                        </div>
-
-                        <div className="flex gap-16">
-                          <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-3">Primary Brand Color</label>
-                            <input
-                              type="color"
-                              value={inviteForm.primaryBrandColor}
-                              onChange={(e) => setInviteForm((f) => ({ ...f, primaryBrandColor: e.target.value }))}
-                              className="h-9 w-14 rounded-md border border-gray-200 bg-transparent"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[13px] font-bold text-gray-700 mb-3">Secondary Color</label>
-                            <input
-                              type="color"
-                              value={inviteForm.secondaryBrandColor}
-                              onChange={(e) => setInviteForm((f) => ({ ...f, secondaryBrandColor: e.target.value }))}
-                              className="h-9 w-14 rounded-md border border-gray-200 bg-transparent"
-                            />
+                          <label className="block text-[13px] font-bold text-gray-700 mb-2">Primary Color</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={inviteForm.primaryBrandColor} onChange={(e) => setInviteForm((f) => ({ ...f, primaryBrandColor: e.target.value }))} className="h-9 w-12 rounded-lg border border-gray-200 bg-transparent cursor-pointer" />
+                            <span className="text-[12px] font-mono text-gray-500">{inviteForm.primaryBrandColor}</span>
                           </div>
                         </div>
-
                         <div>
-                          <label className="block text-[13px] font-bold text-gray-700 mb-2">Font Selection</label>
-                          <select
-                            value={inviteForm.brandFont}
-                            onChange={(e) => setInviteForm((f) => ({ ...f, brandFont: e.target.value }))}
-                            className="w-full bg-[#f8f9fb] border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230] appearance-none"
-                          >
+                          <label className="block text-[13px] font-bold text-gray-700 mb-2">Secondary Color</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={inviteForm.secondaryBrandColor} onChange={(e) => setInviteForm((f) => ({ ...f, secondaryBrandColor: e.target.value }))} className="h-9 w-12 rounded-lg border border-gray-200 bg-transparent cursor-pointer" />
+                            <span className="text-[12px] font-mono text-gray-500">{inviteForm.secondaryBrandColor}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <InputField label="Font">
+                        <div className="relative">
+                          <select value={inviteForm.brandFont} onChange={(e) => setInviteForm((f) => ({ ...f, brandFont: e.target.value }))} className={`appearance-none pr-10 ${inputCls(false)}`}>
                             <option value="Inter">Inter</option>
                             <option value="Poppins">Poppins</option>
                             <option value="Montserrat">Montserrat</option>
                             <option value="Roboto">Roboto</option>
                           </select>
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         </div>
-                      </>
-                    )}
-                  </>
-                )}
-                
-                <div className="pt-6 flex justify-end">
-                  <button
-                    type="button"
-                    disabled={companySaving}
-                    onClick={() => {
-                      if (viewMode === 'add') {
-                        submitInviteCompany();
-                      } else {
-                        submitEditCompany();
-                      }
-                    }}
-                    className="px-10 py-3.5 bg-black text-white rounded-xl text-[14px] font-bold shadow-md hover:bg-gray-900 transition-colors w-full sm:w-auto disabled:opacity-50"
-                  >
-                    {viewMode === 'add' ? (companySaving ? 'Sending…' : 'Save & Send email & password') : 'Update'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
+                      </InputField>
+                    </div>
+                  )}
+                </>
+              )}
+            </SectionCard>
           </div>
 
-          {/* Success ModalOverlay */}
-          {showSuccessModal && (
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center animate-in fade-in duration-200">
-              <div className="bg-white rounded-[28px] shadow-2xl p-10 max-w-sm w-full text-center text-gray-900 animate-in zoom-in-95 duration-300">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-[#8bed21] to-[#5AD43D] mx-auto flex items-center justify-center mb-6 shadow-lg shadow-[#8bed21]/30">
-                  <Check className="w-8 h-8 text-black" strokeWidth={3} />
+          {/* Right column — sticky summary + submit */}
+          <div className="xl:sticky xl:top-4 h-fit space-y-4">
+
+            {/* Summary card */}
+            <div className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <h3 className="text-[13px] font-black text-gray-900">Summary</h3>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Company</span>
+                  <span className="text-[13px] font-bold text-gray-900 text-right max-w-[160px] truncate">{inviteForm.companyName || '—'}</span>
                 </div>
-                <h2 className="text-xl font-display font-[900] mb-2 tracking-tight">Agent added successfully</h2>
-                <p className="text-[13px] font-medium text-gray-500 mb-8 px-4 leading-relaxed">
-                  Congratulations! The new agent is added to the system and an email has been sent with their login and password.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSuccessModal(false);
-                    setViewMode('list');
-                    setInviteForm(createEmptyInviteForm());
-                    setFormErrors({});
-                  }}
-                  className="w-full py-3.5 bg-[#1a1a1a] text-white rounded-xl text-[14px] font-bold shadow-md hover:bg-black transition-colors"
-                >
-                  Okay
-                </button>
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Agent</span>
+                  <span className="text-[13px] font-bold text-gray-900 text-right">
+                    {[inviteForm.agentFirstName, inviteForm.agentLastName].filter(Boolean).join(' ') || '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Email</span>
+                  <span className="text-[12px] font-bold text-gray-700 text-right max-w-[160px] truncate">{inviteForm.agentEmail || '—'}</span>
+                </div>
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Plan</span>
+                  <span className="text-[13px] font-bold text-gray-900">
+                    {subscriptionPlans.find((p) => String(p.id) === String(inviteForm.subscriptionPlanId))?.name || '—'}
+                  </span>
+                </div>
+                {Number(inviteForm.trialDays) > 0 && (
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Trial</span>
+                    <span className="text-[13px] font-bold text-green-600">{inviteForm.trialDays} days</span>
+                  </div>
+                )}
+                {Number(inviteForm.discountPercent) > 0 && (
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Discount</span>
+                    <span className="text-[13px] font-bold text-orange-500">{inviteForm.discountPercent}%</span>
+                  </div>
+                )}
               </div>
             </div>
-          )}
+
+            {/* Submit */}
+            <button
+              type="button"
+              disabled={companySaving}
+              onClick={() => isAdd ? submitInviteCompany() : submitEditCompany()}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#8bed21] to-[#5AD43D] text-[#1a1a1a] text-[14px] font-black shadow-md shadow-green-200 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {companySaving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  {isAdd ? 'Sending invite…' : 'Updating…'}
+                </>
+              ) : (
+                isAdd ? '✉ Save & Send Invite' : 'Update Company'
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className="w-full py-3 rounded-2xl border border-gray-200 bg-white text-[13px] font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center animate-in fade-in duration-200"
+            onClick={(e) => { if (e.target === e.currentTarget) { setShowSuccessModal(false); setViewMode('list'); setInviteForm(createEmptyInviteForm()); setFormErrors({}); } }}
+          >
+            <div className="bg-white rounded-[28px] shadow-2xl p-10 max-w-sm w-full text-center animate-in zoom-in-95 duration-300 mx-4">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-r from-[#8bed21] to-[#5AD43D] mx-auto flex items-center justify-center mb-6 shadow-lg shadow-green-200">
+                <Check className="w-8 h-8 text-black" strokeWidth={3} />
+              </div>
+              <h2 className="text-xl font-display font-[900] mb-2 tracking-tight text-gray-900">Agent added successfully!</h2>
+              <p className="text-[13px] font-medium text-gray-500 mb-8 px-4 leading-relaxed">
+                The new agent has been onboarded. Login credentials have been sent to their email.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setShowSuccessModal(false); setViewMode('list'); setInviteForm(createEmptyInviteForm()); setFormErrors({}); }}
+                className="w-full py-3.5 bg-[#1a1a1a] text-white rounded-xl text-[14px] font-bold hover:bg-black transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1605,7 +1649,10 @@ export default function CompanyManagement() {
             </button>
           )}
 
-          <button className="flex w-full items-center justify-center gap-2 px-5 py-2.5 bg-black text-white shadow-sm rounded-xl text-[13px] font-bold hover:bg-gray-900 transition-colors whitespace-nowrap sm:w-auto">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="flex w-full items-center justify-center gap-2 px-5 py-2.5 bg-black text-white shadow-sm rounded-xl text-[13px] font-bold hover:bg-gray-900 transition-colors whitespace-nowrap sm:w-auto">
             Export <ArrowUpRight className="w-4 h-4 ml-1 opacity-60" strokeWidth={3} />
           </button>
         </div>
@@ -1742,7 +1789,12 @@ export default function CompanyManagement() {
                   className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-2.5 text-left text-[13px] font-bold text-gray-800 hover:bg-gray-50 disabled:opacity-60"
                 >
                   <Ban className="h-4 w-4" />
-                  Deactivate Company
+                  {(() => {
+                    const company = allTableData.find((c) => c.id === actionMenu.id);
+                    const status = String(company?.status || '').toLowerCase();
+                    const isActive = status === 'active' || status === 'trial';
+                    return isActive ? 'Deactivate Company' : 'Activate Company';
+                  })()}
                 </button>
                 <button
                   type="button"
@@ -1796,6 +1848,25 @@ export default function CompanyManagement() {
                   className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-2.5 text-left text-[13px] font-bold text-gray-800 hover:bg-gray-50 disabled:opacity-60"
                 >
                   Subscription Paid
+                </button>
+                <button
+                  type="button"
+                  disabled={actionBusyId === actionMenu.id}
+                  onClick={() => {
+                    const id = actionMenu.id;
+                    setActionMenu(null);
+                    const sub = subscriptionRows.find((r) => r.id === id);
+                    const isCurrentlyActive = ['active', 'trial'].includes(String(sub?.status || '').toLowerCase());
+                    void updateCompany(id, { subscriptionStatus: isCurrentlyActive ? 'paused' : 'active' });
+                  }}
+                  className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-2.5 text-left text-[13px] font-bold text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  {(() => {
+                    const sub = subscriptionRows.find((r) => r.id === actionMenu.id);
+                    const status = String(sub?.status || '').toLowerCase();
+                    const isActive = status === 'active' || status === 'trial';
+                    return isActive ? '⏸ Deactivate Subscription' : '▶ Activate Subscription';
+                  })()}
                 </button>
                 <button
                   type="button"

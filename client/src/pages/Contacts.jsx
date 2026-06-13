@@ -144,7 +144,14 @@ const Contacts = () => {
   const [agents, setAgents] = useState([]);
   const [agentSearch, setAgentSearch] = useState('');
   const [actionInfo, setActionInfo] = useState('');
+  const actionInfoTimerRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  const showActionInfo = (msg) => {
+    setActionInfo(msg);
+    if (actionInfoTimerRef.current) clearTimeout(actionInfoTimerRef.current);
+    actionInfoTimerRef.current = setTimeout(() => setActionInfo(''), 3000);
+  };
 
   const agentOptions = useMemo(() => {
     const fromApi = agents.map((agent) => ({
@@ -326,7 +333,7 @@ const Contacts = () => {
     try {
       await Promise.all(targetIds.map((id) => api.delete(`/contacts/${id}`)));
       setSelectedContacts([]);
-      setActionInfo(targetIds.length > 1 ? `${targetIds.length} contacts deleted.` : 'Contact deleted successfully.');
+      showActionInfo(targetIds.length > 1 ? `${targetIds.length} contacts deleted.` : 'Contact deleted successfully.');
       await refreshCurrentTab();
     } catch (error) {
       setLoadError(error?.response?.data?.message || 'Failed to delete contact.');
@@ -361,7 +368,7 @@ const Contacts = () => {
       setNewContactForm(EMPTY_NEW_CONTACT_FORM);
       setNewContactErrors({});
       setNewContactApiError('');
-      setActionInfo('Contact created successfully.');
+      showActionInfo('Contact created successfully.');
       await refreshCurrentTab();
     } catch (error) {
       setNewContactApiError(error?.response?.data?.message || 'Failed to create contact.');
@@ -418,7 +425,7 @@ const Contacts = () => {
       await api.patch(`/contacts/${editingContact.id}`, payload);
       setEditingContact(null);
       setEditContactForm(EMPTY_EDIT_CONTACT_FORM);
-      setActionInfo('Contact updated successfully.');
+      showActionInfo('Contact updated successfully.');
       await refreshCurrentTab();
     } catch (error) {
       setEditContactApiError(error?.response?.data?.message || 'Failed to update contact.');
@@ -447,7 +454,7 @@ const Contacts = () => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setActionInfo('Contacts exported successfully.');
+      showActionInfo('Contacts exported successfully.');
       setShowImportMenu(false);
     } catch (error) {
       setLoadError(error?.response?.data?.message || 'Failed to export contacts.');
@@ -492,7 +499,7 @@ const Contacts = () => {
 
     await refreshCurrentTab();
     setShowImportMenu(false);
-    setActionInfo(`Imported ${imported} contacts.`);
+    showActionInfo(`Imported ${imported} contacts.`);
   };
 
   const tabs = [
@@ -1028,7 +1035,9 @@ const Contacts = () => {
 
       {/* Add New Contact Modal */}
       {showAddContact && (
-        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowAddContact(false); setNewContactErrors({}); setNewContactApiError(''); setNewContactForm(EMPTY_NEW_CONTACT_FORM); } }}
+        >
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200">
             <button onClick={() => { setShowAddContact(false); setNewContactErrors({}); setNewContactApiError(''); setNewContactForm(EMPTY_NEW_CONTACT_FORM); }} className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 transition-colors">
               <X className="w-5 h-5" />
@@ -1132,7 +1141,9 @@ const Contacts = () => {
 
       {/* Edit Modal */}
       {editingContact && (
-        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setEditingContact(null); setEditContactErrors({}); setEditContactApiError(''); setEditContactForm(EMPTY_EDIT_CONTACT_FORM); } }}
+        >
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200">
             <button onClick={() => { setEditingContact(null); setEditContactErrors({}); setEditContactApiError(''); setEditContactForm(EMPTY_EDIT_CONTACT_FORM); }} className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 transition-colors">
                <X className="w-5 h-5" />
@@ -1225,7 +1236,9 @@ const Contacts = () => {
 
       {/* Delete Modal */}
       {deletingContact && (
-        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setDeletingContact(null); }}
+        >
           <div className="bg-white rounded-[32px] shadow-xl w-full max-w-[400px] p-8 relative flex flex-col items-center animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
                <Trash2 className="w-7 h-7 text-[#dc2626]" />

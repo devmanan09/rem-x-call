@@ -52,6 +52,16 @@ export function useNotifications(filter = 'all', intervalMs = 30000) {
     }
   };
 
+  const unarchiveNotif = async (id) => {
+    try {
+      await api.patch(`/notifications/${id}/unarchive`);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      window.dispatchEvent(new Event('remxcall:notifications-changed'));
+    } catch {
+      // Ignore
+    }
+  };
+
   const markAllRead = async () => {
     try {
       await api.post('/notifications/read-all');
@@ -85,6 +95,7 @@ export function useNotifications(filter = 'all', intervalMs = 30000) {
     refresh: fetchNotifications,
     markRead,
     archiveNotif,
+    unarchiveNotif,
     markAllRead,
   };
 }

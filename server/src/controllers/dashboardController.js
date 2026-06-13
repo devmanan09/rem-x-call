@@ -44,10 +44,18 @@ const getProductOverview = catchAsync(async (req, res) => {
     res.send(stats);
 });
 
+const getCallChartData = catchAsync(async (req, res) => {
+    const data = await dashboardService.getCallChartData({
+        period: req.query.period || 'weekly',
+    });
+    res.send(data);
+});
+
 module.exports = {
     getStats,
     getRecentCalls,
     getFollowUps,
     getAgentPerformance,
     getProductOverview,
+    getCallChartData,
 };

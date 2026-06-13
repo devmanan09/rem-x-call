@@ -56,7 +56,7 @@ const FilterDropdown = ({ filter, setFilter }) => {
 
 const InboxPanel = ({ isOpen }) => {
   const [filter, setFilter] = useState('all');
-  const { notifications, markRead, archiveNotif, markAllRead, loading } = useNotifications(filter);
+  const { notifications, markRead, archiveNotif, unarchiveNotif, markAllRead, loading } = useNotifications(filter);
 
   return (
     <div className={`absolute top-[76px] bottom-0 left-0 w-full sm:w-[420px] bg-white shadow-[10px_0_40px_rgba(0,0,0,0.04)] border-r border-gray-100 z-40 transition-transform duration-300 ease-out flex flex-col ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -144,18 +144,31 @@ const InboxPanel = ({ isOpen }) => {
                     {notif.body}
                   </p>
                   
-                  {/* Action buttons (Archive) */}
+                  {/* Action buttons */}
                   <div className="flex items-center gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        archiveNotif(notif.id);
-                      }}
-                      className="text-[11px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
-                    >
-                      <Archive className="w-3.5 h-3.5" />
-                      Archive
-                    </button>
+                    {filter === 'archived' ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          unarchiveNotif(notif.id);
+                        }}
+                        className="text-[11px] font-bold text-blue-500 hover:text-blue-700 flex items-center gap-1"
+                      >
+                        <Archive className="w-3.5 h-3.5" />
+                        Unarchive
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          archiveNotif(notif.id);
+                        }}
+                        className="text-[11px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                      >
+                        <Archive className="w-3.5 h-3.5" />
+                        Archive
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
