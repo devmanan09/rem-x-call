@@ -110,6 +110,11 @@ const DashboardLayout = () => {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [isProfileMenuOpen]);
 
+  // Close notifications panel on route change
+  useEffect(() => {
+    setIsNotificationsOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="flex h-screen h-dvh min-h-0 w-full bg-[#f4f5f7] font-['Inter',_system-ui,_sans-serif] overflow-hidden relative">
       {/* Mobile Overlay */}

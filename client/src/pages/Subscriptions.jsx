@@ -43,6 +43,7 @@ const Subscriptions = () => {
     chatEnabled: true,
     recordingEnabled: false,
     whiteLabelEnabled: false,
+    isActive: true,
   });
 
   const fetchPlans = useCallback(async () => {
@@ -88,6 +89,7 @@ const Subscriptions = () => {
       chatEnabled: true,
       recordingEnabled: false,
       whiteLabelEnabled: false,
+      isActive: true,
     });
     setEditingSub(null);
     setShowAddModal(true);
@@ -104,31 +106,50 @@ const Subscriptions = () => {
       chatEnabled: Boolean(sub.chatEnabled),
       recordingEnabled: Boolean(sub.recordingEnabled),
       whiteLabelEnabled: Boolean(sub.whiteLabelEnabled),
+      isActive: sub.isActive !== false,
     });
     setEditingSub(sub);
     setShowAddModal(true);
   };
 
   const savePlan = async () => {
+    // ── Validate before saving ──────────────────────────────────
+    const errors = [];
+    if (!form.name.trim()) errors.push('Plan name is required.');
+
+    const price = Number.parseFloat(form.priceMonthly);
+    if (form.priceMonthly === '' || Number.isNaN(price)) errors.push('Price is required.');
+    else if (price < 0) errors.push('Price cannot be negative.');
+
+    const agents = Number.parseInt(form.maxAgents, 10);
+    if (form.maxAgents === '' || Number.isNaN(agents)) errors.push('Agent limit is required.');
+    else if (agents < 0) errors.push('Agent limit cannot be negative.');
+
+    const contactLimit = form.contactLimitLabel !== '' ? Number.parseInt(form.contactLimitLabel, 10) : null;
+    if (form.contactLimitLabel !== '' && (Number.isNaN(contactLimit) || contactLimit < 0)) {
+      errors.push('Contact limit cannot be negative.');
+    }
+
+    if (errors.length > 0) {
+      setLoadError(errors.join(' '));
+      return;
+    }
+
     setSaving(true);
     setLoadError('');
     try {
       const payload = {
         name: form.name.trim(),
-        priceMonthly: Number.parseFloat(form.priceMonthly) || 0,
+        priceMonthly: price,
         billingCycle: form.billingCycle,
-        maxAgents: Number.parseInt(form.maxAgents, 10) || 0,
-        contactLimitLabel: form.contactLimitLabel.trim() || null,
+        maxAgents: agents,
+        contactLimitLabel: contactLimit !== null ? String(contactLimit.toLocaleString()) : null,
         dialerEnabled: form.dialerEnabled,
         chatEnabled: form.chatEnabled,
         recordingEnabled: form.recordingEnabled,
         whiteLabelEnabled: form.whiteLabelEnabled,
-        isActive: true,
+        isActive: form.isActive,
       };
-      if (!payload.name) {
-        setLoadError('Plan name is required.');
-        return;
-      }
       if (editingSub) {
         await api.patch(`/subscription-plans/${editingSub.id}`, payload);
       } else {
@@ -253,8 +274,8 @@ const Subscriptions = () => {
                 <td className="px-5 py-4 text-[13px] font-bold text-gray-700">{sub.recording ? 'On' : 'Off'}</td>
                 <td className="px-5 py-4 text-[13px] font-bold text-gray-700">{sub.whitelabel ? 'On' : 'Off'}</td>
                 <td className="px-5 py-4">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#22c55e]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+                  <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${sub._raw.isActive ? 'text-[#22c55e]' : 'text-gray-400'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${sub._raw.isActive ? 'bg-[#22c55e]' : 'bg-gray-400'}`} />
                     {sub.status}
                   </span>
                 </td>
@@ -267,7 +288,7 @@ const Subscriptions = () => {
                     <MoreVertical className="w-4 h-4" />
                   </button>
                   {activeMenuId === sub.id && (
-                    <div className="absolute right-12 top-10 w-36 bg-white rounded-2xl shadow-xl ring-1 ring-gray-100 py-2 z-20 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="absolute right-12 top-10 w-44 bg-white rounded-2xl shadow-xl ring-1 ring-gray-100 py-2 z-20 animate-in fade-in zoom-in-95 duration-200">
                       <button
                         type="button"
                         onClick={() => {
@@ -277,6 +298,25 @@ const Subscriptions = () => {
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-bold text-gray-700 hover:bg-gray-50 transition-colors text-left"
                       >
                         <Edit2 className="w-4 h-4" /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setActiveMenuId(null);
+                          try {
+                            await api.patch(`/subscription-plans/${sub.id}`, { isActive: !sub._raw.isActive });
+                            await fetchPlans();
+                          } catch (e) {
+                            setLoadError(e?.response?.data?.message || 'Failed to update status.');
+                          }
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-bold text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                      >
+                        {sub._raw.isActive ? (
+                          <><span className="text-base">⏸</span> Deactivate</>
+                        ) : (
+                          <><span className="text-base">▶</span> Activate</>
+                        )}
                       </button>
                       <button
                         type="button"
@@ -310,7 +350,15 @@ const Subscriptions = () => {
       />
 
       {(showAddModal || editingSub) && (
-        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddModal(false);
+              setEditingSub(null);
+            }
+          }}
+        >
           <div className="bg-white rounded-[24px] shadow-xl w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200 my-auto max-h-[90vh] overflow-y-auto">
             <button
               type="button"
@@ -347,7 +395,10 @@ const Subscriptions = () => {
                   min="0"
                   step="0.01"
                   value={form.priceMonthly}
-                  onChange={(e) => setForm((f) => ({ ...f, priceMonthly: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || Number.parseFloat(v) >= 0) setForm((f) => ({ ...f, priceMonthly: v }));
+                  }}
                   className="w-full bg-[#f8f9fb] border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230] transition-shadow"
                 />
               </div>
@@ -370,7 +421,10 @@ const Subscriptions = () => {
                   type="number"
                   min="0"
                   value={form.maxAgents}
-                  onChange={(e) => setForm((f) => ({ ...f, maxAgents: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || Number.parseInt(v, 10) >= 0) setForm((f) => ({ ...f, maxAgents: v }));
+                  }}
                   className="w-full bg-[#f8f9fb] border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230] transition-shadow"
                 />
               </div>
@@ -378,10 +432,14 @@ const Subscriptions = () => {
               <div>
                 <label className="block text-[13px] font-bold text-gray-500 mb-1.5">Contact limit (label)</label>
                 <input
-                  type="text"
+                  type="number"
+                  min="0"
                   value={form.contactLimitLabel}
-                  onChange={(e) => setForm((f) => ({ ...f, contactLimitLabel: e.target.value }))}
-                  placeholder="e.g. 10,000"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '' || Number.parseInt(v, 10) >= 0) setForm((f) => ({ ...f, contactLimitLabel: v }));
+                  }}
+                  placeholder="e.g. 10000"
                   className="w-full bg-[#f8f9fb] border border-gray-200 py-3 px-4 rounded-xl text-[14px] font-semibold text-gray-900 focus:ring-2 focus:ring-[#7ae230] transition-shadow"
                 />
               </div>
@@ -408,6 +466,25 @@ const Subscriptions = () => {
                   </div>
                 ))}
               </div>
+
+              {/* Plan Status */}
+              <div className="flex justify-between items-center rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div>
+                  <p className="text-[13px] font-bold text-gray-800">Plan Status</p>
+                  <p className="text-[11px] font-medium text-gray-400 mt-0.5">
+                    {form.isActive ? 'Plan is visible to new companies.' : 'Plan is hidden from new companies.'}
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={form.isActive}
+                    onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                  />
+                  <div className="w-9 h-5 bg-[#1a1a1a] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#22c55e]" />
+                </label>
+              </div>
             </div>
 
             <button
@@ -423,7 +500,10 @@ const Subscriptions = () => {
       )}
 
       {deletingSub && (
-        <div className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-[#000000]/30 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setDeletingSub(null); }}
+        >
           <div className="bg-white rounded-[32px] shadow-xl w-full max-w-[400px] p-8 relative flex flex-col items-center animate-in zoom-in-95 duration-200">
             <div className="relative mb-6">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-[0_0_25px_rgba(239,68,68,0.5)] z-10 relative">

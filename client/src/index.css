@@ -81,7 +81,18 @@ textarea:disabled {
   display: none; /* Chrome, Safari and Opera */
 }
 
-/* Wide tables: thin, low-contrast scrollbars (no reserved gutter / chunky default bar) */
+/* Remove browser default black outline — use only custom focus rings */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible,
+button:focus,
+button:focus-visible {
+  outline: none;
+}
+
 .company-table-scroll {
   scrollbar-gutter: auto;
   scrollbar-width: thin;

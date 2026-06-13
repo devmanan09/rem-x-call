@@ -44,6 +44,11 @@ const archiveNotification = catchAsync(async (req, res) => {
     res.send({ notification });
 });
 
+const unarchiveNotification = catchAsync(async (req, res) => {
+    const notification = await notificationService.unarchiveNotification(req.user.id, req.params.id);
+    res.send({ notification });
+});
+
 const markAllNotificationsRead = catchAsync(async (req, res) => {
     const markedCount = await notificationService.markAllAsRead(req.user.id);
     res.send({ markedCount });
@@ -55,5 +60,6 @@ module.exports = {
     listNotifications,
     markNotificationRead,
     archiveNotification,
+    unarchiveNotification,
     markAllNotificationsRead,
 };

@@ -12,8 +12,10 @@ export default function QuickNoteModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-[24px] shadow-2xl max-w-md w-full p-6 relative animate-in zoom-in-95">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="bg-white rounded-[24px] shadow-2xl max-w-md w-full p-6 relative animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={onClose}

@@ -1,7 +1,25 @@
 const http = require('http');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
-const { Contact, CallLog } = require('../models');
+const { Contact, CallLog, Company, SubscriptionPlan } = require('../models');
+
+/**
+ * Helper: check if agent's company plan has a feature enabled.
+ * Returns true for admin users always.
+ */
+const agentHasFeature = async (user, feature) => {
+    if (user.role === 'admin') return true;
+    if (!user.companyId) return false;
+    const company = await Company.findByPk(user.companyId, {
+        include: [{
+            model: SubscriptionPlan,
+            as: 'subscriptionPlan',
+            required: false,
+            attributes: [feature],
+        }],
+    });
+    return Boolean(company?.subscriptionPlan?.[feature]);
+};
 
 /**
  * POST /v1/calls/initiate
@@ -49,6 +67,9 @@ const initiateCall = catchAsync(async (req, res) => {
             data += chunk;
         });
         amiRes.on('end', async () => {
+            // Check if recording is enabled for this agent's plan
+            const recordingEnabled = await agentHasFeature(req.user, 'recordingEnabled');
+
             // Log the call attempt in CallLogs (starts as in_progress)
             const logEntry = await CallLog.create({
                 contactId: contactObj ? contactObj.id : null,
@@ -57,12 +78,14 @@ const initiateCall = catchAsync(async (req, res) => {
                 durationSeconds: 0,
                 status: 'in_progress',
                 outcome: 'Connected',
+                recordingUrl: null, // only set later if recordingEnabled
             });
 
             res.status(200).send({
                 success: true,
                 message: 'Call origination requested successfully',
                 callId: logEntry.id,
+                recordingEnabled,
                 voipResponse: data.trim(),
             });
         });

@@ -11,5 +11,6 @@ router.get('/recent-calls', dashboardController.getRecentCalls);
 router.get('/follow-ups', dashboardController.getFollowUps);
 router.get('/agent-performance', dashboardController.getAgentPerformance);
 router.get('/product-overview', dashboardController.getProductOverview);
+router.get('/call-chart', dashboardController.getCallChartData);
 
 module.exports = router;

@@ -325,7 +325,9 @@ export default function AgentProductManagement() {
     const isEdit = title.toLowerCase().includes('edit');
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
         <style>{`
           .no-scrollbar::-webkit-scrollbar {
             display: none !important;
@@ -663,7 +665,9 @@ export default function AgentProductManagement() {
       {editing && formModal('Edit product', () => setEditing(null))}
       {/* Custom Confirm Delete Modal */}
       {deletingProduct && (
-        <div className="fixed inset-0 bg-[#09090b]/40 backdrop-blur-[2px] z-50 flex items-center justify-center animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-[#09090b]/40 backdrop-blur-[2px] z-[999] flex items-center justify-center animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setDeletingProduct(null); }}
+        >
           <div
             style={{
               width: '566px',

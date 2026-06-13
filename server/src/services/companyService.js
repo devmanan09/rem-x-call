@@ -200,6 +200,23 @@ const createCompanyWithAgent = async (payload) => {
         throw new ApiError(400, 'Invalid or inactive subscription plan');
     }
 
+    // ── Enforce maxAgents limit ─────────────────────────────────────────────
+    // maxAgents = 0 means unlimited
+    if (plan.maxAgents > 0) {
+        const currentAgentCount = await User.count({
+            include: [{
+                model: Company,
+                as: 'company',
+                where: { subscriptionPlanId: plan.id },
+                required: true,
+            }],
+            where: { role: 'user' },
+        });
+        if (currentAgentCount >= plan.maxAgents) {
+            throw new ApiError(400, `This plan allows a maximum of ${plan.maxAgents} agent(s). Limit reached.`);
+        }
+    }
+
     const email = normalizeEmail(payload.agentEmail);
     if (!email) {
         throw new ApiError(400, 'agentEmail is required');

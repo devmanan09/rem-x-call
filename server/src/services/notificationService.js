@@ -173,6 +173,19 @@ const archiveNotification = async (userId, id) => {
 };
 
 /**
+ * Unarchives a specific notification.
+ */
+const unarchiveNotification = async (userId, id) => {
+    const notification = await Notification.findOne({ where: { id, userId } });
+    if (!notification) {
+        throw new ApiError(404, 'Notification not found');
+    }
+    notification.isArchived = false;
+    await notification.save();
+    return notification;
+};
+
+/**
  * Marks all notifications for a user as read.
  */
 const markAllAsRead = async (userId) => {
@@ -224,6 +237,7 @@ module.exports = {
     getNotifications,
     markAsRead,
     archiveNotification,
+    unarchiveNotification,
     markAllAsRead,
     createNotification,
 };

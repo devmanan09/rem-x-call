@@ -25,10 +25,12 @@ const TrendBadge = ({ value, isUp }) => (
   </div>
 );
 
-const WeeklyDropdown = ({ variant = 'white' }) => {
+const WeeklyDropdown = ({ variant = 'white', onPeriodChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState('Weekly');
-  const options = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+  const options = ['Daily', 'Weekly', 'Monthly'];
+
+  const periodMap = { Daily: 'daily', Weekly: 'weekly', Monthly: 'monthly' };
 
   const btnCls =
     variant === 'green'
@@ -58,6 +60,7 @@ const WeeklyDropdown = ({ variant = 'white' }) => {
                 onClick={() => {
                   setSelected(opt);
                   setIsOpen(false);
+                  onPeriodChange?.(periodMap[opt]);
                 }}
                 className={`w-full text-left px-4 py-2.5 text-[12px] hover:bg-gray-50 transition-colors ${
                   selected === opt ? 'font-bold text-gray-900 bg-gray-50' : 'font-medium text-gray-600'
@@ -76,13 +79,13 @@ const WeeklyDropdown = ({ variant = 'white' }) => {
 /* ── chart placeholder data ───────────────────────────────────── */
 
 const defaultChartData = [
-  { name: 'M', failed: 0, busy: 0, connected: 0 },
-  { name: 'T', failed: 0, busy: 0, connected: 0 },
-  { name: 'W', failed: 0, busy: 0, connected: 0 },
-  { name: 'T', failed: 0, busy: 0, connected: 0 },
-  { name: 'F', failed: 0, busy: 0, connected: 0 },
-  { name: 'S', failed: 0, busy: 0, connected: 0 },
-  { name: 'Today', failed: 0, busy: 0, connected: 0 },
+  { name: 'Mon', failed: 0, busy: 0, connected: 0, missed: 0 },
+  { name: 'Tue', failed: 0, busy: 0, connected: 0, missed: 0 },
+  { name: 'Wed', failed: 0, busy: 0, connected: 0, missed: 0 },
+  { name: 'Thu', failed: 0, busy: 0, connected: 0, missed: 0 },
+  { name: 'Fri', failed: 0, busy: 0, connected: 0, missed: 0 },
+  { name: 'Sat', failed: 0, busy: 0, connected: 0, missed: 0 },
+  { name: 'Today', failed: 0, busy: 0, connected: 0, missed: 0 },
 ];
 
 /* ══════════════════════════════════════════════════════════════ */
@@ -110,6 +113,10 @@ const Dashboard = () => {
   const [onlineUserIds, setOnlineUserIds] = useState(new Set());
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [liveCallSearch, setLiveCallSearch] = useState('');
+  const [chartPeriod, setChartPeriod] = useState('weekly');
+  const [chartData, setChartData] = useState(defaultChartData);
+  const [callTotals, setCallTotals] = useState({ connected: 0, busy: 0, failed: 0, noAnswer: 0 });
+  const [overviewPeriod, setOverviewPeriod] = useState('30d');
 
   useEffect(() => {
     if (!token) return undefined;
@@ -154,8 +161,11 @@ const Dashboard = () => {
     (async () => {
       setLoading(true);
       try {
+        // Map overview period label to API period param
+        const periodMap = { daily: '7d', weekly: '30d', monthly: '90d' };
+        const apiPeriod = periodMap[overviewPeriod] || '30d';
         const [statsRes] = await Promise.allSettled([
-          api.get('/dashboard/stats', { params: { period: '30d' } }),
+          api.get('/dashboard/stats', { params: { period: apiPeriod } }),
         ]);
         if (cancelled) return;
         
@@ -171,7 +181,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [overviewPeriod]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,7 +228,23 @@ const Dashboard = () => {
     setRecentPage(1);
   }, [liveCallSearch]);
 
-  const hasChartData = defaultChartData.some((d) => d.failed + d.busy + d.connected > 0);
+  // Fetch call chart data whenever period changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/dashboard/call-chart', { params: { period: chartPeriod } });
+        if (cancelled) return;
+        setChartData(res.data.chartData?.length ? res.data.chartData : defaultChartData);
+        setCallTotals(res.data.totals || { connected: 0, busy: 0, failed: 0, noAnswer: 0 });
+      } catch (err) {
+        console.error('Call chart fetch error:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [chartPeriod]);
+
+  const hasChartData = chartData.some((d) => d.failed + d.busy + d.connected + (d.missed || 0) > 0);
 
   /* ── render ─────────────────────────────────────────────────── */
   return (
@@ -238,7 +264,7 @@ const Dashboard = () => {
           <span className="text-[#1c4714] text-[15px] font-bold">
             Overview
           </span>
-          <WeeklyDropdown variant="white" />
+          <WeeklyDropdown variant="white" onPeriodChange={setOverviewPeriod} />
         </div>
 
         {/* 3-column stat cards */}
@@ -332,7 +358,7 @@ const Dashboard = () => {
           <h2 className="text-[22px] font-display font-[900] tracking-tight text-[#1a1a1a]">
             Calls
           </h2>
-          <WeeklyDropdown />
+          <WeeklyDropdown onPeriodChange={setChartPeriod} />
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.45fr)]">
@@ -340,7 +366,7 @@ const Dashboard = () => {
           <div className="relative min-h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={defaultChartData}
+                data={chartData}
                 margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
                 barSize={36}
               >
@@ -384,10 +410,10 @@ const Dashboard = () => {
           {/* 2×2 stat cards */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {[
-              { title: 'Connected Calls', val: stats.totalCalls || '0', isUp: true, color: 'bg-[#ADF808]' },
-              { title: 'No Answer', val: '0', isUp: true, color: 'bg-[#5AD43D]' },
-              { title: 'Busy', val: '0', isUp: true, color: 'bg-[#1c4714]' },
-              { title: 'Failed', val: stats.followUps || '0', isUp: true, color: 'bg-[#ef4444]' },
+              { title: 'Connected Calls', val: callTotals.connected, isUp: true, color: 'bg-[#ADF808]' },
+              { title: 'No Answer', val: callTotals.noAnswer, isUp: false, color: 'bg-[#5AD43D]' },
+              { title: 'Busy', val: callTotals.busy, isUp: false, color: 'bg-[#1c4714]' },
+              { title: 'Failed', val: callTotals.failed, isUp: false, color: 'bg-[#ef4444]' },
             ].map((stat, i) => (
               <div
                 key={i}

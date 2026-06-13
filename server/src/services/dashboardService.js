@@ -328,10 +328,76 @@ const getProductOverview = async ({ period = '30d' } = {}) => {
     };
 };
 
+/**
+ * GET /dashboard/call-chart?period=weekly|monthly|daily
+ * Returns per-day call breakdown (connected, busy, failed, missed) for the bar chart.
+ */
+const getCallChartData = async ({ period = 'weekly' } = {}) => {
+    const now = new Date();
+    const days = period === 'monthly' ? 30 : period === 'daily' ? 1 : 7;
+
+    const result = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+        const dayStart = new Date(now);
+        dayStart.setDate(now.getDate() - i);
+        dayStart.setHours(0, 0, 0, 0);
+
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayStart.getDate() + 1);
+
+        const where = { startedAt: { [Op.between]: [dayStart, dayEnd] } };
+
+        const [connected, busy, failed, missed] = await Promise.all([
+            CallLog.count({ where: { ...where, outcome: 'Connected' } }),
+            CallLog.count({ where: { ...where, outcome: 'Busy' } }),
+            CallLog.count({ where: { ...where, outcome: 'Failed' } }),
+            CallLog.count({ where: { ...where, status: 'missed' } }),
+        ]);
+
+        // Label: for weekly show short day names, for monthly show date
+        let name;
+        if (period === 'daily') {
+            name = 'Today';
+        } else if (period === 'weekly') {
+            const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            name = i === 0 ? 'Today' : DAY_NAMES[dayStart.getDay()];
+        } else {
+            name = `${dayStart.getDate()}/${dayStart.getMonth() + 1}`;
+        }
+
+        result.push({ name, connected, busy, failed, missed });
+    }
+
+    // Also return totals for the stat cards
+    const periodStart = new Date(now);
+    periodStart.setDate(now.getDate() - days);
+    periodStart.setHours(0, 0, 0, 0);
+    const periodWhere = { startedAt: { [Op.gte]: periodStart } };
+
+    const [totalConnected, totalBusy, totalFailed, totalMissed] = await Promise.all([
+        CallLog.count({ where: { ...periodWhere, outcome: 'Connected' } }),
+        CallLog.count({ where: { ...periodWhere, outcome: 'Busy' } }),
+        CallLog.count({ where: { ...periodWhere, outcome: 'Failed' } }),
+        CallLog.count({ where: { ...periodWhere, status: 'missed' } }),
+    ]);
+
+    return {
+        chartData: result,
+        totals: {
+            connected: totalConnected,
+            busy: totalBusy,
+            failed: totalFailed,
+            noAnswer: totalMissed,
+        },
+    };
+};
+
 module.exports = {
     getStats,
     getRecentCalls,
     getFollowUps,
     getAgentPerformance,
     getProductOverview,
+    getCallChartData,
 };
