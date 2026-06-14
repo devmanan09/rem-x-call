@@ -13,6 +13,7 @@ const OtpVerification = () => {
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const inputs = useRef([]);
@@ -87,8 +88,11 @@ const OtpVerification = () => {
     if (!email || resending) return;
     setResending(true);
     setError('');
+    setSuccessMsg('');
     try {
       await api.post('/auth/forgot-password', { email });
+      setSuccessMsg('Code resent! Check your email.');
+      setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -134,6 +138,11 @@ const OtpVerification = () => {
             ))}
           </div>
           {error && <p className="text-xs text-red-500 text-center font-medium">{error}</p>}
+          {successMsg && (
+            <p className="text-xs text-green-600 text-center font-semibold mt-1 animate-in fade-in duration-300">
+              ✓ {successMsg}
+            </p>
+          )}
         </div>
 
         <button

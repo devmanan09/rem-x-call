@@ -1,8 +1,16 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { sequelize, Company, User, SubscriptionPlan, Message } = require('../models');
+const { sequelize, Company, User, SubscriptionPlan, Message, UserSession } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { sendAgentInviteEmail } = require('./emailService');
+
+// Revoke all active sessions for an agent (forces logout)
+const revokeAllAgentSessions = async (userId) => {
+    await UserSession.update(
+        { revokedAt: new Date(), revokedReason: 'company_deactivated' },
+        { where: { userId, revokedAt: null } }
+    );
+};
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
@@ -433,7 +441,29 @@ const updateCompanyByAdmin = async (companyId, payload, adminUser = null) => {
         if (!['active', 'paused', 'cancelled', 'trial'].includes(status)) {
             throw new ApiError(400, 'Invalid subscriptionStatus');
         }
+        const previousStatus = company.subscriptionStatus;
         company.subscriptionStatus = status;
+
+        // ── Sync agent isActive with company subscription status ──────────
+        const isDeactivated = ['paused', 'cancelled'].includes(status);
+        const wasActive = !['paused', 'cancelled'].includes(previousStatus);
+
+        if (isDeactivated && wasActive) {
+            // Deactivating — disable agent login and revoke all their sessions
+            const companyAgents = await User.findAll({ where: { companyId: company.id, role: 'user' } });
+            for (const agent of companyAgents) {
+                agent.isActive = false;
+                await agent.save();
+                await revokeAllAgentSessions(agent.id);
+            }
+        } else if (!isDeactivated && !wasActive) {
+            // Reactivating — re-enable agent login
+            const companyAgents = await User.findAll({ where: { companyId: company.id, role: 'user' } });
+            for (const agent of companyAgents) {
+                agent.isActive = true;
+                await agent.save();
+            }
+        }
     }
     if (payload.trialDays !== undefined) {
         const days = Number.parseInt(payload.trialDays, 10) || 0;

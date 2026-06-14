@@ -116,6 +116,18 @@ const login = catchAsync(async (req, res) => {
     const { email, password } = req.body;
     const credUser = await userService.loginUserWithEmailAndPassword(email, password);
     let user = await loadUserWithCompany(credUser.id);
+
+    // Block login if company is deactivated
+    if (user?.role === 'user' && user.companyId) {
+        const companyStatus = user.company?.subscriptionStatus;
+        if (companyStatus === 'paused') {
+            throw new ApiError(403, 'Your company subscription is currently paused. Please contact your administrator.');
+        }
+        if (companyStatus === 'cancelled') {
+            throw new ApiError(403, 'Your company subscription has been cancelled. Please contact your administrator.');
+        }
+    }
+
     if (user?.role === 'user' && user.companyId && user.company?.inviteStatus === 'pending') {
         await Company.update({ inviteStatus: 'active', inviteCancelledAt: null }, { where: { id: user.companyId } });
         user = await loadUserWithCompany(credUser.id);

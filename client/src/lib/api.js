@@ -21,6 +21,18 @@ api.interceptors.response.use(
         }
       }
     }
+    // 403 from deactivated company — force logout with message
+    if (status === 403 && typeof window !== 'undefined') {
+      const msg = error?.response?.data?.message || '';
+      if (msg.includes('subscription')) {
+        localStorage.removeItem('remxcall_access_token');
+        localStorage.removeItem('remxcall_user');
+        if (window.location.pathname !== '/login') {
+          sessionStorage.setItem('remxcall_login_error', msg);
+          window.location.assign('/login');
+        }
+      }
+    }
     return Promise.reject(error);
   }
 );

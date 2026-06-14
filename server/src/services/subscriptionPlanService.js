@@ -109,7 +109,21 @@ const updatePlan = async (id, payload) => {
 
 const deletePlan = async (id) => {
     const plan = await getPlanById(id);
+
+    // Check if any company is currently using this plan
+    const { Company } = require('../models');
+    const usageCount = await Company.count({ where: { subscriptionPlanId: id } });
+    if (usageCount > 0) {
+        // Soft-delete: mark as inactive instead of deleting
+        // This preserves the plan for existing companies while hiding it from new sign-ups
+        plan.isActive = false;
+        await plan.save();
+        return { softDeleted: true, usageCount };
+    }
+
+    // No companies using this plan — safe to hard delete
     await plan.destroy();
+    return { softDeleted: false };
 };
 
 module.exports = {

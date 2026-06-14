@@ -122,6 +122,11 @@ export default function AgentDashboardLayout() {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [isProfileMenuOpen]);
 
+  // Close notifications panel on route change
+  useEffect(() => {
+    setIsNotificationsOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="relative flex h-screen h-dvh min-h-0 w-full overflow-hidden bg-[#f4f5f7] font-sans">
       {isSidebarOpen && (

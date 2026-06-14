@@ -47,6 +47,20 @@ const authenticate = catchAsync(async (req, res, next) => {
         throw new ApiError(401, 'Account is disabled');
     }
 
+    // Check if agent's company is deactivated (blocks active sessions too)
+    if (user.role === 'user' && user.companyId) {
+        const { Company } = require('../models');
+        const company = await Company.findByPk(user.companyId, {
+            attributes: ['subscriptionStatus'],
+        });
+        if (company?.subscriptionStatus === 'paused') {
+            throw new ApiError(403, 'Your company subscription is currently paused. Please contact your administrator.');
+        }
+        if (company?.subscriptionStatus === 'cancelled') {
+            throw new ApiError(403, 'Your company subscription has been cancelled. Please contact your administrator.');
+        }
+    }
+
     req.user = user;
     req.token = token;
     req.tokenPayload = payload;
