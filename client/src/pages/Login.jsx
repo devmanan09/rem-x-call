@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Mail, Eye, EyeOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
@@ -17,6 +17,15 @@ const Login = () => {
   const [passwordError, setPasswordError] = useState('');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Show message if redirected due to company deactivation
+  useEffect(() => {
+    const msg = sessionStorage.getItem('remxcall_login_error');
+    if (msg) {
+      setFormError(msg);
+      sessionStorage.removeItem('remxcall_login_error');
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

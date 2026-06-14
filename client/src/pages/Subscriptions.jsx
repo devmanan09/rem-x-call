@@ -170,8 +170,12 @@ const Subscriptions = () => {
     setSaving(true);
     setLoadError('');
     try {
-      await api.delete(`/subscription-plans/${deletingSub.id}`);
+      const res = await api.delete(`/subscription-plans/${deletingSub.id}`);
       setDeletingSub(null);
+      // Soft delete: plan was deactivated instead of deleted (still in use by companies)
+      if (res.data?.softDeleted) {
+        setLoadError(res.data.message);
+      }
       await fetchPlans();
     } catch (e) {
       setLoadError(e?.response?.data?.message || 'Could not delete plan.');

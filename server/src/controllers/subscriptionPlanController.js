@@ -23,8 +23,16 @@ const updatePlan = catchAsync(async (req, res) => {
 });
 
 const deletePlan = catchAsync(async (req, res) => {
-    await subscriptionPlanService.deletePlan(req.params.planId);
-    res.status(204).send();
+    const result = await subscriptionPlanService.deletePlan(req.params.planId);
+    if (result.softDeleted) {
+        // Plan has active companies — deactivated instead of deleted
+        res.send({
+            message: `Plan is in use by ${result.usageCount} company(s) and has been deactivated instead of deleted. Existing companies keep their plan.`,
+            softDeleted: true,
+        });
+    } else {
+        res.status(204).send();
+    }
 });
 
 module.exports = {

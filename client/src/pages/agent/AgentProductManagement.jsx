@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Plus, MoreVertical, X, UploadCloud, ChevronDown } from 'lucide-react';
 import { api } from '../../lib/api';
 import PaginationFooter from '../../components/PaginationFooter';
@@ -121,6 +122,7 @@ export default function AgentProductManagement() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [menuOpenId, setMenuOpenId] = useState(null);
+  const [menuRect, setMenuRect] = useState(null);
   const [deletingProduct, setDeletingProduct] = useState(null);
 
   // Pagination states
@@ -225,6 +227,7 @@ export default function AgentProductManagement() {
           name,
           image,
           category: form.category,
+          status: form.status,
           qty,
           sold,
           price,
@@ -437,6 +440,26 @@ export default function AgentProductManagement() {
               </div>
             </div>
 
+            {/* Status selection */}
+            <div>
+              <label className="block text-[12px] font-bold text-gray-500 mb-1 ml-0.5">
+                Status
+              </label>
+              <div className="relative">
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                  className="block w-full px-4 pr-10 py-2.5 border border-transparent focus:border-[#7ae230] focus:ring-1 focus:ring-[#7ae230] rounded-2xl text-[13px] bg-[var(--Colors-Background,#F7F7F7)] transition-all font-semibold text-gray-800 appearance-none cursor-pointer"
+                >
+                  <option value="Available">Available</option>
+                  <option value="Out of stock">Out of stock</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-600">
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
             {/* Quantity */}
             <div>
               <label className="block text-[12px] font-bold text-gray-500 mb-1 ml-0.5">
@@ -566,36 +589,19 @@ export default function AgentProductManagement() {
                    <td className="p-4 text-[13px] font-semibold text-gray-600 whitespace-nowrap">{formatDate(row.createdAt || row.created)}</td>
                   <td className="p-4 text-[13px] font-bold text-gray-800 tabular-nums">{row.qty}</td>
                   <td className="p-4 text-[13px] font-bold text-gray-800 tabular-nums">{row.sold}</td>
-                  <td className="p-4 text-center relative z-10">
+                  <td className="p-4 text-center relative">
                     <button
                       type="button"
-                      onClick={() => setMenuOpenId((id) => (id === row.id ? null : row.id))}
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setMenuRect(rect);
+                        setMenuOpenId((id) => (id === row.id ? null : row.id));
+                      }}
                       className="p-2 rounded-lg text-gray-400 hover:bg-gray-100"
                       aria-label="Actions"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
-                    {menuOpenId === row.id && (
-                      <>
-                        <button type="button" className="fixed inset-0 z-20" onClick={() => setMenuOpenId(null)} aria-hidden />
-                        <div className="absolute right-0 top-full mt-1.5 z-30 w-32 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 text-left">
-                          <button
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 text-gray-800"
-                            onClick={() => openEdit(row)}
-                          >
-                            Edit product
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 text-red-600"
-                            onClick={() => handleDelete(row.id)}
-                          >
-                            Delete product
-                          </button>
-                        </div>
-                      </>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -663,6 +669,48 @@ export default function AgentProductManagement() {
 
       {showAdd && formModal('Add product', () => setShowAdd(false))}
       {editing && formModal('Edit product', () => setEditing(null))}
+
+      {/* Portal dropdown menu for product actions */}
+      {menuOpenId && menuRect && typeof document !== 'undefined' && createPortal(
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[200]"
+            onClick={() => setMenuOpenId(null)}
+            aria-hidden
+          />
+          <div
+            className="fixed z-[201] w-36 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 text-left"
+            style={{
+              top: menuRect.bottom + 4,
+              left: Math.min(menuRect.right - 144, window.innerWidth - 152),
+            }}
+          >
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 text-gray-800"
+              onClick={() => {
+                const row = products.find((p) => p.id === menuOpenId);
+                if (row) openEdit(row);
+                setMenuOpenId(null);
+              }}
+            >
+              Edit product
+            </button>
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-[13px] font-semibold hover:bg-gray-50 text-red-600"
+              onClick={() => {
+                handleDelete(menuOpenId);
+                setMenuOpenId(null);
+              }}
+            >
+              Delete product
+            </button>
+          </div>
+        </>,
+        document.body
+      )}
       {/* Custom Confirm Delete Modal */}
       {deletingProduct && (
         <div className="fixed inset-0 bg-[#09090b]/40 backdrop-blur-[2px] z-[999] flex items-center justify-center animate-in fade-in duration-200"
