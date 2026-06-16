@@ -542,9 +542,7 @@ const Messages = () => {
               >
                 <div className="relative shrink-0 mt-0.5">
                   <img src={avatarSrc} alt="" className="w-10 h-10 rounded-full object-cover" />
-                  {isPeerOnline && (
-                    <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-[#10b981] ring-2 ring-white" />
-                  )}
+                  <span className={`absolute top-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-white ${isPeerOnline ? 'bg-[#10b981]' : 'bg-gray-300'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline mb-0.5">
@@ -614,9 +612,7 @@ const Messages = () => {
                     alt="" 
                     className="w-10 h-10 rounded-full object-cover" 
                   />
-                  {isCurrentPeerOnline && (
-                    <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-[#10b981] ring-2 ring-white" />
-                  )}
+                  <span className={`absolute top-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-white ${isCurrentPeerOnline ? 'bg-[#10b981]' : 'bg-gray-300'}`} />
                 </div>
                 <div className="min-w-0">
                   <h2 className="text-[15px] font-bold text-gray-900 leading-tight truncate">{headerTitle}</h2>
